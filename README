@@ -1,3 +1,9 @@
+Thanks to all predecessors' work, I add hareware time synchronization with a IDS UI-1221LE camera.
+In my project, I only use a camera and a Xsens without any extra sampling device, such as, a Single chip microcomputer.
+As for the camera driver demo, I put it in this project: (LeatherWang/ueye_cam)[https://github.com/LeatherWang/ueye_cam/tree/extrigger_software]
+
+for detail, you can see `MT Manager User Manual`, `MT Low-Level Communication Protocol Documentation` and `MTw SDK User Manual`.
+
 ROS Driver for XSens MT/MTi/MTi-G devices.
 
 See: http://ros.org/wiki/ethzasl_xsens_driver
