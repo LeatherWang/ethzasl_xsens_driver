@@ -1,4 +1,6 @@
 #!/usr/bin/env python
+# -*- coding:utf8 -*-
+
 import roslib; roslib.load_manifest('xsens_driver')
 import rospy
 import select
@@ -12,6 +14,8 @@ from sensor_msgs.msg import Imu, NavSatFix, NavSatStatus, MagneticField,\
     FluidPressure, Temperature, TimeReference
 from geometry_msgs.msg import TwistStamped, PointStamped
 from diagnostic_msgs.msg import DiagnosticArray, DiagnosticStatus
+from xsens_driver.msg import CamIMUStamp
+from xsens_driver.srv import IMUTriggerControl, IMUTriggerControlRequest, IMUTriggerControlResponse
 import time
 import datetime
 import calendar
@@ -51,7 +55,6 @@ def matrix_from_diagonal(diagonal):
 
 
 class XSensDriver(object):
-
     def __init__(self):
         device = get_param('~device', 'auto')
         baudrate = get_param('~baudrate', 0)
@@ -80,8 +83,21 @@ class XSensDriver(object):
         self.mt = mtdevice.MTDevice(device, baudrate, timeout,
                                     initial_wait=initial_wait)
 
+        #self.mt._ensure_config_state()
+
+        # for sync camera and IMU
+        # self.ser = serial.Serial('/dev/ttyUSB0', 115200, timeout=1)
+        # self.ser.open()
+        self.SyncOut = False
+        self.sendCounter = 0
+        self.sendTrigger = False
+        self.pubIMUCameraSync = rospy.Publisher('/xsens/cam_imu_sync_stamp', CamIMUStamp, queue_size=10)
+        self.serverTrigger = rospy.Service('/xsens/trigger_control', IMUTriggerControl, self.serv_trigger_cb)
+        self.sync_msg = CamIMUStamp()
+
         # optional no rotation procedure for internal calibration of biases
         # (only mark iv devices)
+        # 标定陀螺仪bias
         no_rotation_duration = get_param('~no_rotation_duration', 0)
         if no_rotation_duration:
             rospy.loginfo("Starting the no-rotation procedure to estimate the "
@@ -103,6 +119,7 @@ class XSensDriver(object):
             get_param_list("~orientation_covariance_diagonal", [radians(1.), radians(1.), radians(9.)])
         )
 
+        # 诊断
         self.diag_msg = DiagnosticArray()
         self.stest_stat = DiagnosticStatus(name='mtnode: Self Test', level=1,
                                            message='No status information')
@@ -132,6 +149,20 @@ class XSensDriver(object):
         self.str_pub = rospy.Publisher('imu_data_str', String, queue_size=10)
         self.last_delta_q_time = None
         self.delta_q_rate = None
+
+        self.mt._ensure_config_state()
+
+    def serv_trigger_cb(self, req):
+        if req.trigger_enable == True:
+            self.sendTrigger = True
+            self.SyncOut = False
+            rospy.loginfo("start trigger, sendCounter: %d" % self.sendCounter)
+        else:
+            self.sendTrigger = False
+            rospy.loginfo("stop trigger, stamp_buffer_offset should be %d" % self.sendCounter)
+        res = IMUTriggerControlResponse()
+        res.success = True
+        return res
 
     def reset_vars(self):
         self.imu_msg = Imu()
@@ -405,6 +436,8 @@ class XSensDriver(object):
                 # we borrow the status from the raw gps for pos_gps_msg
                 self.pos_gps_msg.status.status = NavSatStatus.STATUS_NO_FIX
                 self.pos_gps_msg.status.service = 0
+            if status & 0x400000:
+                self.SyncOut = True
 
         def fill_from_Sample(ts):
             '''Catch 'Sample' MTData blocks.'''
@@ -689,7 +722,7 @@ class XSensDriver(object):
             except KeyError:
                 pass
             try:
-                status = o['StatusWord']
+                status = o['StatusWord'] # 状态字，包含SyncOut marker
                 fill_from_Stat(status)
             except KeyError:
                 pass
@@ -697,24 +730,40 @@ class XSensDriver(object):
         def find_handler_name(name):
             return "fill_from_%s" % (name.replace(" ", "_"))
 
-        # get data
+
+        if self.sendTrigger == False:
+            self.mt._ensure_config_state()
+            return
+        else:
+            self.mt._ensure_measurement_state()
+
+        # get data，从串口读取数据
         try:
-            data = self.mt.read_measurement()
+            data = self.mt.read_measurement() # 这个阻塞吗？
         except mtdef.MTTimeoutException:
             time.sleep(0.1)
             return
+
         # common header
         self.h = Header()
         self.h.stamp = rospy.Time.now()
         self.h.frame_id = self.frame_id
 
-        # set default values
+        # todo
+        if self.SyncOut == True:
+            self.sync_msg.frame_stamp = rospy.get_rostime()
+            self.sync_msg.frame_seq_id = self.sendCounter
+            self.pubIMUCameraSync.publish(self.sync_msg)
+            self.sendCounter += 1
+            self.SyncOut = False
+
+                # set default values
         self.reset_vars()
 
         # fill messages based on available data fields
         for n, o in data.items():
             try:
-                locals()[find_handler_name(n)](o)
+                locals()[find_handler_name(n)](o) # 调用函数
             except KeyError:
                 rospy.logwarn("Unknown MTi data packet: '%s', ignoring." % n)
 
@@ -724,6 +773,7 @@ class XSensDriver(object):
             if self.imu_pub is None:
                 self.imu_pub = rospy.Publisher('imu/data', Imu, queue_size=10)
             self.imu_pub.publish(self.imu_msg)
+
         if self.pub_raw_gps:
             self.raw_gps_msg.header = self.h
             if self.raw_gps_pub is None:
