@@ -83,11 +83,7 @@ class XSensDriver(object):
         self.mt = mtdevice.MTDevice(device, baudrate, timeout,
                                     initial_wait=initial_wait)
 
-        #self.mt._ensure_config_state()
-
         # for sync camera and IMU
-        # self.ser = serial.Serial('/dev/ttyUSB0', 115200, timeout=1)
-        # self.ser.open()
         self.SyncOut = False
         self.sendCounter = 0
         self.sendTrigger = False
@@ -150,6 +146,7 @@ class XSensDriver(object):
         self.last_delta_q_time = None
         self.delta_q_rate = None
 
+        # 初始化完成时，切入config mode，等待...
         self.mt._ensure_config_state()
 
     def serv_trigger_cb(self, req):
@@ -730,7 +727,7 @@ class XSensDriver(object):
         def find_handler_name(name):
             return "fill_from_%s" % (name.replace(" ", "_"))
 
-
+        # for sync, when xsens is in config mode, it will stop measureing, and also stop send trigger, so...
         if self.sendTrigger == False:
             self.mt._ensure_config_state()
             return
@@ -757,7 +754,7 @@ class XSensDriver(object):
             self.sendCounter += 1
             self.SyncOut = False
 
-                # set default values
+        # set default values
         self.reset_vars()
 
         # fill messages based on available data fields
