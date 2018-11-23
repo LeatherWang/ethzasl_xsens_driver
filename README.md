@@ -7,13 +7,13 @@ For detail, you can see `MT Manager User Manual`, `MT Low-Level Communication Pr
 
 
 Firstly, use the `SyncOut`, make Xsens send a extrigger singal.
-![A3](https://github.com/LeatherWang/ethzasl_xsens_driver/blob/master/screenshots/A3.jpg)
+![A3](https://github.com/LeatherWang/ethzasl_xsens_driver/raw/master/screenshots/A3.jpg)
 
 This is the camera and IMU and they communicate only use one cable. 
-![A2](https://github.com/LeatherWang/ethzasl_xsens_driver/blob/master/screenshots/A2.jpg)
+![A2](https://github.com/LeatherWang/ethzasl_xsens_driver/raw/master/screenshots/A2.jpg)
 
 This is the result.
-![A1](https://github.com/LeatherWang/ethzasl_xsens_driver/blob/master/screenshots/A1.png)
+![A1](https://github.com/LeatherWang/ethzasl_xsens_driver/raw/master/screenshots/A1.png)
 
 ---
 
